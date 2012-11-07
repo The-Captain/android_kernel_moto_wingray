@@ -923,7 +923,7 @@ static void sdhci_finish_data(struct sdhci_host *host)
 
 		sdhci_send_command(host, data->stop);
 	} else
-		tasklet_schedule(&host->finish_tasklet);
+		tasklet_hi_schedule(&host->finish_tasklet);
 }
 
 static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
@@ -952,7 +952,7 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 				"inhibit bit(s).\n", mmc_hostname(host->mmc));
 			sdhci_dumpregs(host);
 			cmd->error = -EIO;
-			tasklet_schedule(&host->finish_tasklet);
+			tasklet_hi_schedule(&host->finish_tasklet);
 			return;
 		}
 		timeout--;
@@ -973,7 +973,7 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		printk(KERN_ERR "%s: Unsupported response type!\n",
 			mmc_hostname(host->mmc));
 		cmd->error = -EINVAL;
-		tasklet_schedule(&host->finish_tasklet);
+		tasklet_hi_schedule(&host->finish_tasklet);
 		return;
 	}
 
@@ -996,6 +996,7 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		flags |= SDHCI_CMD_DATA;
 
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
+
 }
 
 static void sdhci_finish_command(struct sdhci_host *host)
@@ -1033,7 +1034,7 @@ static void sdhci_finish_command(struct sdhci_host *host)
 			sdhci_finish_data(host);
 
 		if (!host->cmd->data)
-			tasklet_schedule(&host->finish_tasklet);
+			tasklet_hi_schedule(&host->finish_tasklet);
 
 		host->cmd = NULL;
 	}
@@ -1247,7 +1248,7 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	if (!present || host->flags & SDHCI_DEVICE_DEAD) {
 		host->mrq->cmd->error = -ENOMEDIUM;
-		tasklet_schedule(&host->finish_tasklet);
+		tasklet_hi_schedule(&host->finish_tasklet);
 	} else {
 		u32 present_state;
 
@@ -1880,7 +1881,7 @@ static void sdhci_tasklet_card(unsigned long param)
 			sdhci_reset(host, SDHCI_RESET_DATA);
 
 			host->mrq->cmd->error = -ENOMEDIUM;
-			tasklet_schedule(&host->finish_tasklet);
+			tasklet_hi_schedule(&host->finish_tasklet);
 		}
 	}
 
@@ -1975,7 +1976,7 @@ static void sdhci_timeout_timer(unsigned long data)
 			else
 				host->mrq->cmd->error = -ETIMEDOUT;
 
-			tasklet_schedule(&host->finish_tasklet);
+			tasklet_hi_schedule(&host->finish_tasklet);
 		}
 	}
 
@@ -2022,7 +2023,7 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 		host->cmd->error = -EILSEQ;
 
 	if (host->cmd->error) {
-		tasklet_schedule(&host->finish_tasklet);
+		tasklet_hi_schedule(&host->finish_tasklet);
 		return;
 	}
 
@@ -2204,7 +2205,7 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 			pr_err("%s: Unexpected Card change bit is set\n",
 				mmc_hostname(host->mmc));
 		else
-			tasklet_schedule(&host->card_tasklet);
+			tasklet_hi_schedule(&host->card_tasklet);
 	}
 
 	intmask &= ~(SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE);
@@ -2854,7 +2855,7 @@ void sdhci_remove_host(struct sdhci_host *host, int dead)
 				" transfer!\n", mmc_hostname(host->mmc));
 
 			host->mrq->cmd->error = -ENOMEDIUM;
-			tasklet_schedule(&host->finish_tasklet);
+			tasklet_hi_schedule(&host->finish_tasklet);
 		}
 
 		spin_unlock_irqrestore(&host->lock, flags);

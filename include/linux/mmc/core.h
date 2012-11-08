@@ -128,6 +128,8 @@ struct mmc_request {
 
 	struct completion	completion;
 	void			(*done)(struct mmc_request *);/* completion function */
+	struct timeval		start_time;	/* "creation" time */
+	struct timeval		end_time;	/* "done" time */
 };
 
 struct mmc_host;

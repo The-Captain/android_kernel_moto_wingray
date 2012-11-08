@@ -1222,6 +1222,10 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	WARN_ON(host->mrq != NULL);
 
+#ifdef CONFIG_MMC_SHOW_LONG_OPS
+	do_gettimeofday(&mrq->start_time);
+#endif
+
 #ifndef SDHCI_USE_LEDS_CLASS
 	sdhci_activate_led(host);
 #endif
@@ -2759,11 +2763,9 @@ int sdhci_add_host(struct sdhci_host *host)
 	 */
 	mmc->max_blk_count = (host->quirks & SDHCI_QUIRK_NO_MULTIBLOCK) ? 1 : 65535;
 
-#ifdef CONFIG_MMC_SDHCI_NATIVE_BLOCKSIZE
 	printk(KERN_INFO "%s: mss %u mrs %u mbs %u mbc %u\n", mmc_hostname(mmc),
 		mmc->max_seg_size, mmc->max_req_size, mmc->max_blk_size,
 		mmc->max_blk_count);
-#endif
 	
 	/*
 	 * Init tasklets.

@@ -95,6 +95,11 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 {
 	struct mmc_command *cmd = mrq->cmd;
 	int err = cmd->error;
+#ifdef CONFIG_MMC_SHOW_LONG_OPS
+	unsigned flags = 0, xferbytes = 0;
+	static unsigned long total_r_us, total_w_us, total_r_bytes, total_w_bytes;
+	static unsigned total_reads, total_writes;
+#endif
 
 	if (err && cmd->retries && mmc_host_is_spi(host)) {
 		if (cmd->resp[0] & R1_SPI_ILLEGAL_COMMAND)
@@ -117,6 +122,10 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 			cmd->resp[2], cmd->resp[3]);
 
 		if (mrq->data) {
+#ifdef CONFIG_MMC_SHOW_LONG_OPS
+			xferbytes = mrq->data->bytes_xfered;
+			flags = mrq->data->flags;
+#endif
 			pr_debug("%s:     %d bytes transferred: %d\n",
 				mmc_hostname(host),
 				mrq->data->bytes_xfered, mrq->data->error);
@@ -130,6 +139,41 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 				mrq->stop->resp[2], mrq->stop->resp[3]);
 		}
 
+#ifdef CONFIG_MMC_SHOW_LONG_OPS
+	{
+		unsigned long start_time;
+		unsigned delta;
+		char rchr, wchr;
+
+		do_gettimeofday(&mrq->end_time);
+		delta = (unsigned) (timeval_to_ns(&mrq->end_time) -
+			(start_time = timeval_to_ns(&mrq->start_time))) / 1000;
+		rchr = wchr = ' ';
+		if (flags & MMC_DATA_READ) {
+			rchr = 'R';
+			total_reads++;
+			total_r_us += delta;
+			total_r_bytes += xferbytes;
+		};
+		if (flags & MMC_DATA_WRITE) {
+			wchr = 'W';
+			total_writes++;
+			total_w_us += delta;
+			total_w_bytes += xferbytes;
+		};
+
+		if ((delta /= 1000) > CONFIG_MMC_SHOW_LONG_OPS_DURATION) {
+				printk(KERN_INFO "%s: %c%c %3uK %4u ms ",
+				  mmc_hostname(host), rchr, wchr, xferbytes >> 10,
+				    delta);
+				printk("(av: W: #%u/%luK/%luus R: #%u/%luK/%luus)\n",
+				  total_writes, total_w_bytes >> 10,
+				    total_w_us / total_writes,
+				  total_reads,  total_r_bytes >> 10,
+				    total_r_us / total_reads);
+		};
+	};
+#endif
 		if (mrq->done)
 			mrq->done(mrq);
 

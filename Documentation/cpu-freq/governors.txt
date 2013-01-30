@@ -26,7 +26,7 @@ Contents:
 2.1  Performance
 2.2  Powersave
 2.3  Userspace
-2.4  Ondemand
+2.4  OnDemandX
 2.5  Conservative
 2.6  Interactive
 2.7  SmartassV2
@@ -108,8 +108,11 @@ by making a sysfs file "scaling_setspeed" available in the CPU-device
 directory.
 
 
-2.4 Ondemand
+2.4 OnDemandX
 ------------
+
+OnDemandX is an unofficially updated edition of OnDemand.
+The below is for the original Ondemand edition as I couldn't find a governors.txt with the info.
 
 The CPUfreq governor "ondemand" sets the CPU depending on the
 current usage. To do this the CPU must have the capability to

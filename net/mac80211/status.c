@@ -333,7 +333,7 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 				continue;
 			if (wk->offchan_tx.frame != skb)
 				continue;
-			wk->offchan_tx.frame = NULL;
+			wk->offchan_tx.status = true;
 			break;
 		}
 		rcu_read_unlock();
@@ -443,3 +443,11 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 EXPORT_SYMBOL(ieee80211_tx_status);
+
+void ieee80211_report_low_ack(struct ieee80211_sta *pubsta, u32 num_packets)
+{
+	struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
+	cfg80211_cqm_pktloss_notify(sta->sdata->dev, sta->sta.addr,
+				    num_packets, GFP_ATOMIC);
+}
+EXPORT_SYMBOL(ieee80211_report_low_ack);

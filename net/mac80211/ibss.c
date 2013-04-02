@@ -40,7 +40,7 @@ static void ieee80211_rx_mgmt_auth_ibss(struct ieee80211_sub_if_data *sdata,
 					struct ieee80211_mgmt *mgmt,
 					size_t len)
 {
-	u16 auth_alg, auth_transaction, status_code;
+	u16 auth_alg, auth_transaction;
 
 	lockdep_assert_held(&sdata->u.ibss.mtx);
 
@@ -49,7 +49,6 @@ static void ieee80211_rx_mgmt_auth_ibss(struct ieee80211_sub_if_data *sdata,
 
 	auth_alg = le16_to_cpu(mgmt->u.auth.auth_alg);
 	auth_transaction = le16_to_cpu(mgmt->u.auth.auth_transaction);
-	status_code = le16_to_cpu(mgmt->u.auth.status_code);
 
 	/*
 	 * IEEE 802.11 standard does not require authentication in IBSS
@@ -527,8 +526,6 @@ static void ieee80211_sta_merge_ibss(struct ieee80211_sub_if_data *sdata)
 static void ieee80211_sta_create_ibss(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
-	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_supported_band *sband;
 	u8 bssid[ETH_ALEN];
 	u16 capability;
 	int i;
@@ -550,8 +547,6 @@ static void ieee80211_sta_create_ibss(struct ieee80211_sub_if_data *sdata)
 
 	printk(KERN_DEBUG "%s: Creating new IBSS network, BSSID %pM\n",
 	       sdata->name, bssid);
-
-	sband = local->hw.wiphy->bands[ifibss->channel->band];
 
 	capability = WLAN_CAPABILITY_IBSS;
 
@@ -668,12 +663,16 @@ static void ieee80211_rx_mgmt_probe_req(struct ieee80211_sub_if_data *sdata,
 	int tx_last_beacon, len = req->len;
 	struct sk_buff *skb;
 	struct ieee80211_mgmt *resp;
+	struct sk_buff *presp;
 	u8 *pos, *end;
 
 	lockdep_assert_held(&ifibss->mtx);
 
+	presp = rcu_dereference_protected(ifibss->presp,
+					  lockdep_is_held(&ifibss->mtx));
+
 	if (ifibss->state != IEEE80211_IBSS_MLME_JOINED ||
-	    len < 24 + 2 || !ifibss->presp)
+	    len < 24 + 2 || !presp)
 		return;
 
 	tx_last_beacon = drv_tx_last_beacon(local);
@@ -711,7 +710,7 @@ static void ieee80211_rx_mgmt_probe_req(struct ieee80211_sub_if_data *sdata,
 	}
 
 	/* Reply with ProbeResp */
-	skb = skb_copy(ifibss->presp, GFP_KERNEL);
+	skb = skb_copy(presp, GFP_KERNEL);
 	if (!skb)
 		return;
 
@@ -942,7 +941,7 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 	sdata->u.ibss.state = IEEE80211_IBSS_MLME_SEARCH;
 	sdata->u.ibss.ibss_join_req = jiffies;
 
-	memcpy(sdata->u.ibss.ssid, params->ssid, IEEE80211_MAX_SSID_LEN);
+	memcpy(sdata->u.ibss.ssid, params->ssid, params->ssid_len);
 	sdata->u.ibss.ssid_len = params->ssid_len;
 
 	mutex_unlock(&sdata->u.ibss.mtx);
@@ -967,10 +966,6 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 
 	mutex_lock(&sdata->u.ibss.mtx);
 
-	sdata->u.ibss.state = IEEE80211_IBSS_MLME_SEARCH;
-	memset(sdata->u.ibss.bssid, 0, ETH_ALEN);
-	sdata->u.ibss.ssid_len = 0;
-
 	active_ibss = ieee80211_sta_active_ibss(sdata);
 
 	if (!active_ibss && !is_zero_ether_addr(ifibss->bssid)) {
@@ -991,11 +986,16 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 		}
 	}
 
+	ifibss->state = IEEE80211_IBSS_MLME_SEARCH;
+	memset(ifibss->bssid, 0, ETH_ALEN);
+	ifibss->ssid_len = 0;
+
 	sta_info_flush(sdata->local, sdata);
 
 	/* remove beacon */
 	kfree(sdata->u.ibss.ie);
-	skb = sdata->u.ibss.presp;
+	skb = rcu_dereference_protected(sdata->u.ibss.presp,
+					lockdep_is_held(&sdata->u.ibss.mtx));
 	rcu_assign_pointer(sdata->u.ibss.presp, NULL);
 	sdata->vif.bss_conf.ibss_joined = false;
 	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON_ENABLED |
